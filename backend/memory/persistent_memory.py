@@ -78,6 +78,8 @@ class UserMemory:
                 "career_goals": [],
                 "concerns": [],
             },
+            # Skills added from mentor chat conversations
+            "mentor_chat_skills": [],  # [{skill, added_at, note}]
             # Session summaries (to avoid loading full transcripts)
             "session_summaries": [],  # [{date, type, summary, key_insights}]
         }
@@ -103,6 +105,71 @@ class UserMemory:
         self._data["profile"].update({k: v for k, v in profile_data.items() if v})
         self.log_event("profile_update", json.dumps(profile_data))
         self.save()
+
+    # ── Learning session persistence ───────────────────────────────────────
+
+    @property
+    def _sessions_dir(self) -> Path:
+        d = self.memory_dir / "sessions"
+        d.mkdir(exist_ok=True)
+        return d
+
+    def _skill_slug(self, skill: str) -> str:
+        import re
+        return re.sub(r"[^\w]", "_", skill.lower())[:50]
+
+    def save_learning_session(self, skill: str, level: str, history: list):
+        """Persist a learning session so it can be resumed later."""
+        path = self._sessions_dir / f"{self._skill_slug(skill)}.json"
+        data = {
+            "skill": skill,
+            "level": level,
+            "history": history,
+            "paused_at": datetime.utcnow().isoformat(),
+            "message_count": len([m for m in history if m["role"] == "user"]),
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+    def load_learning_session(self, skill: str) -> dict | None:
+        """Load a saved learning session. Returns None if not found."""
+        path = self._sessions_dir / f"{self._skill_slug(skill)}.json"
+        if path.exists():
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        return None
+
+    def delete_learning_session(self, skill: str):
+        """Remove a completed session."""
+        path = self._sessions_dir / f"{self._skill_slug(skill)}.json"
+        if path.exists():
+            path.unlink()
+
+    def list_active_sessions(self) -> list:
+        """Return all paused learning sessions sorted by most recent."""
+        sessions = []
+        for path in self._sessions_dir.glob("*.json"):
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            sessions.append(data)
+        sessions.sort(key=lambda s: s.get("paused_at", ""), reverse=True)
+        return sessions
+
+    # ── Mentor chat skills ──────────────────────────────────────────────────
+
+    def add_mentor_chat_skill(self, skill: str, note: str = ""):
+        """Save a skill decided during a mentor chat conversation."""
+        existing = [s["skill"].lower() for s in self._data.get("mentor_chat_skills", [])]
+        if skill.lower() not in existing:
+            self._data.setdefault("mentor_chat_skills", []).append({
+                "skill": skill,
+                "added_at": datetime.utcnow().isoformat(),
+                "note": note,
+            })
+            self.save()
+
+    def get_mentor_chat_skills(self) -> list:
+        return self._data.get("mentor_chat_skills", [])
 
     def save_mentor_analysis(self, skill_gaps: list, learning_roadmap: list, recommended_roles: list):
         """Save the full mentor analysis for use across sessions."""
