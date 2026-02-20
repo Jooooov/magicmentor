@@ -80,6 +80,8 @@ class UserMemory:
             },
             # Skills added from mentor chat conversations
             "mentor_chat_skills": [],  # [{skill, added_at, note}]
+            # Courses recommended by mentor
+            "courses": [],  # [{skill, name, url, free, type, completed, completed_at}]
             # Session summaries (to avoid loading full transcripts)
             "session_summaries": [],  # [{date, type, summary, key_insights}]
         }
@@ -170,6 +172,48 @@ class UserMemory:
 
     def get_mentor_chat_skills(self) -> list:
         return self._data.get("mentor_chat_skills", [])
+
+    # ── Course tracking ─────────────────────────────────────────────────────
+
+    def save_courses_from_gaps(self, skill_gaps: list):
+        """Extract courses from mentor skill gaps and save (skip duplicates)."""
+        existing_urls = {c["url"] for c in self._data.get("courses", []) if c.get("url")}
+        added = 0
+        for gap in skill_gaps:
+            skill = gap.get("skill", "")
+            for r in gap.get("resources", []):
+                if isinstance(r, dict):
+                    url = r.get("url", "")
+                    if url and url not in existing_urls:
+                        self._data.setdefault("courses", []).append({
+                            "skill": skill,
+                            "name": r.get("name", url),
+                            "url": url,
+                            "free": r.get("free", True),
+                            "type": r.get("type", "course"),
+                            "completed": False,
+                            "completed_at": None,
+                        })
+                        existing_urls.add(url)
+                        added += 1
+        if added:
+            self.save()
+        return added
+
+    def get_courses(self) -> list:
+        return self._data.get("courses", [])
+
+    def mark_course_done(self, idx: int) -> bool:
+        """Mark course at 0-based index as completed. Returns True if found."""
+        courses = self._data.get("courses", [])
+        pending = [c for c in courses if not c["completed"]]
+        if idx < 0 or idx >= len(pending):
+            return False
+        pending[idx]["completed"] = True
+        pending[idx]["completed_at"] = datetime.utcnow().isoformat()
+        self.log_event("course_done", pending[idx]["name"])
+        self.save()
+        return True
 
     def save_mentor_analysis(self, skill_gaps: list, learning_roadmap: list, recommended_roles: list):
         """Save the full mentor analysis for use across sessions."""

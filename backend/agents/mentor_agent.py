@@ -28,6 +28,8 @@ When analysing skill gaps, search for:
 - Current job postings for the target role
 - Which skills appear most in those postings
 - Current average salaries in the candidate's location
+- For each skill gap, find 2-3 specific courses/resources with real URLs valid as of today.
+  Include free options (official docs, YouTube, free tiers) AND paid courses when relevant.
 
 You have persistent memory about this user. Use it for personalised, continuity-aware advice."""
 
@@ -71,7 +73,10 @@ Return ONLY a JSON object (no other text):
             "builds_on": "Django experience they already have",
             "estimated_learning_time": "1-2 weeks",
             "job_market_demand": "high",
-            "resources": ["FastAPI official docs", "testdriven.io FastAPI course"]
+            "resources": [
+                {{"name": "FastAPI official tutorial", "url": "https://fastapi.tiangolo.com/tutorial/", "free": true, "type": "docs"}},
+                {{"name": "TestDriven.io FastAPI course", "url": "https://testdriven.io/courses/tdd-fastapi/", "free": false, "type": "course"}}
+            ]
         }}
     ],
     "recommended_roles": [
@@ -116,6 +121,8 @@ Return ONLY a JSON object (no other text):
                 current=result["current_skills"],
                 targets=[{"name": g["skill"], "priority": g["priority"]} for g in result.get("skill_gaps", [])],
             )
+        # Save courses from skill gap resources
+        user_memory.save_courses_from_gaps(result.get("skill_gaps", []))
         # Save full analysis so learning session can use it across sessions
         user_memory.save_mentor_analysis(
             skill_gaps=result.get("skill_gaps", []),

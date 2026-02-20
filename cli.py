@@ -417,6 +417,66 @@ def flow_chat(mem, cv_text: str = ""):
                 print(f"  ✓ '{skill}' adicionado")
 
 
+def flow_progress(mem):
+    section("O TEU PROGRESSO")
+
+    # ── Skills ──────────────────────────────────────────────────────────
+    skills = mem.skills
+    if skills.get("current"):
+        top = ", ".join(s["name"] for s in skills["current"][:5])
+        print(f"\n  Skills actuais: {top}")
+
+    active_sessions = mem.list_active_sessions()
+    if active_sessions:
+        print("\n  Em aprendizagem:")
+        for s in active_sessions:
+            print(f"    → {s['skill']} ({s.get('message_count', 0)} trocas)")
+
+    if skills.get("completed"):
+        print("\n  Skills validadas:")
+        for s in skills["completed"]:
+            print(f"    ✓ {s['name']} ({s.get('score', '?')}/100)")
+
+    # ── Courses ─────────────────────────────────────────────────────────
+    all_courses = mem.get_courses()
+    pending   = [c for c in all_courses if not c["completed"]]
+    done      = [c for c in all_courses if c["completed"]]
+
+    if not all_courses:
+        print("\n  Sem cursos guardados. Faz a análise do perfil (opção 1) para o mentor sugerir cursos.")
+    else:
+        if pending:
+            print(f"\n  Cursos para fazer ({len(pending)}):")
+            for i, c in enumerate(pending, 1):
+                free_tag = "[FREE] " if c.get("free") else "[PAGO] "
+                print(f"    {i}. {free_tag}{c['name']}")
+                print(f"       {c['url']}")
+                print(f"       Skill: {c['skill']}")
+
+        if done:
+            print(f"\n  Cursos concluídos ({len(done)}):")
+            for c in done:
+                date = c.get("completed_at", "")[:10]
+                print(f"    ✓ {c['name']}  ({date})")
+
+        # ── Mark courses as done ─────────────────────────────────────
+        if pending:
+            print()
+            mark = ask("Marcar curso como concluído? (número ou 'n')", "n")
+            if mark.lower() != "n":
+                try:
+                    idx = int(mark) - 1
+                    if mem.mark_course_done(idx):
+                        print(f"  ✓ '{pending[idx]['name']}' marcado como concluído!")
+                    else:
+                        print("  Número inválido.")
+                except ValueError:
+                    print("  Número inválido.")
+
+    # ── Mentor notes ─────────────────────────────────────────────────
+    print(f"\n{mem.build_context_prompt()}")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -495,13 +555,7 @@ def main():
             flow_chat(mem, cv_text)
 
         elif choice == "5":
-            section("YOUR PROGRESS")
-            print(mem.build_context_prompt())
-            skills = mem.skills
-            if skills.get("completed"):
-                print("\nValidated skills:")
-                for s in skills["completed"]:
-                    print(f"  ✓ {s['name']} ({s.get('score', '?')}/100)")
+            flow_progress(mem)
 
         elif choice == "0":
             print("\nGoodbye! Keep learning! \n")
