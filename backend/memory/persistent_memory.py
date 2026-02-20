@@ -114,8 +114,19 @@ class UserMemory:
         self.save()
 
     def get_last_analysis(self) -> dict:
-        """Return the last mentor analysis, or empty dict if none."""
-        return self._data.get("last_mentor_analysis", {})
+        """Return the last mentor analysis. Falls back to targets from memory if full analysis not saved yet."""
+        saved = self._data.get("last_mentor_analysis", {})
+        if saved and saved.get("skill_gaps"):
+            return saved
+        # Fallback: reconstruct minimal analysis from skills.targets
+        targets = self._data.get("skills", {}).get("targets", [])
+        if targets:
+            return {
+                "skill_gaps": [{"skill": t["name"], "priority": t.get("priority", i + 1)} for i, t in enumerate(targets)],
+                "learning_roadmap": [],
+                "recommended_roles": [],
+            }
+        return {}
 
     def update_skills(self, current: list = None, targets: list = None):
         if current:
