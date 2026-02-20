@@ -176,6 +176,8 @@ def flow_mentor(cv_text: str, mem) -> dict:
 def flow_learning(mem, analysis: dict = None):
     section("LEARNING SESSION")
 
+    gap_info = None  # Will hold the mentor's gap data for the chosen skill
+
     if analysis and analysis.get("skill_gaps"):
         print("\nRecommended skills to learn:")
         for i, gap in enumerate(analysis["skill_gaps"][:5], 1):
@@ -184,9 +186,12 @@ def flow_learning(mem, analysis: dict = None):
         # If they entered a number, resolve it
         try:
             idx = int(skill) - 1
-            skill = analysis["skill_gaps"][idx]["skill"]
+            gap_info = analysis["skill_gaps"][idx]
+            skill = gap_info["skill"]
         except (ValueError, IndexError):
-            pass
+            # They typed a name — try to find it in the gaps
+            skill_lower = skill.lower()
+            gap_info = next((g for g in analysis["skill_gaps"] if g["skill"].lower() == skill_lower), None)
     else:
         skill = ask("What skill do you want to learn?")
 
@@ -195,19 +200,44 @@ def flow_learning(mem, analysis: dict = None):
 
     level = ask("Your current level (beginner/intermediate/advanced)", "beginner")
 
-    session = start_learning_session(skill, level, user_memory=mem)
+    # Build context from the mentor's analysis for this specific skill
+    mentor_context = ""
+    if gap_info:
+        mentor_context = f"Mentor analysis for {skill}:\n"
+        mentor_context += f"- Why it matters: {gap_info.get('reason', '')}\n"
+        mentor_context += f"- Builds on: {gap_info.get('builds_on', 'N/A')}\n"
+        mentor_context += f"- Estimated time: {gap_info.get('estimated_learning_time', '?')}\n"
+        if gap_info.get("resources"):
+            mentor_context += f"- Recommended resources: {', '.join(gap_info['resources'])}\n"
+        if gap_info.get("job_market_demand") == "high":
+            mentor_context += "- Market demand: HIGH — appears frequently in job postings\n"
+
+    # Add roadmap week context if available
+    if analysis and analysis.get("learning_roadmap"):
+        for week in analysis["learning_roadmap"]:
+            if skill.lower() in week.get("focus", "").lower():
+                mentor_context += f"\nRoadmap context: Week {week['week']} — {week.get('focus', '')}"
+                if week.get("milestones"):
+                    mentor_context += f"\nMilestones to reach: {', '.join(week['milestones'])}"
+                break
+
+    session = start_learning_session(skill, level, user_memory=mem, context=mentor_context)
     history = session["history"]
 
     print(f"\n{'='*55}")
     print(f"  Tutor: {session['message']}")
     print(f"{'='*55}")
-    print("\nType your responses. Commands: 'validate' to run final quiz, 'quit' to exit\n")
+    print("\nType your responses. Commands: 'validate' — final quiz | 'back' or 'q' — return to menu\n")
 
     while True:
-        user_input = ask("You").strip()
+        try:
+            user_input = ask("You").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n\nSession paused. Your progress is saved!")
+            break
         if not user_input:
             continue
-        if user_input.lower() in ("quit", "exit", "q"):
+        if user_input.lower() in ("quit", "exit", "q", "back"):
             print("\nSession paused. Your progress is saved!")
             break
         if user_input.lower() == "validate":
@@ -288,14 +318,19 @@ def flow_jobs(mem, analysis: dict = None):
 
 def flow_chat(mem, cv_text: str = ""):
     section("MENTOR CHAT")
-    print("Chat with your AI mentor. Type 'memory' to see what it remembers. 'quit' to exit.\n")
+    print("Chat with your AI mentor.")
+    print("Commands: 'memory' — what the mentor remembers | 'back' or 'q' — return to menu\n")
 
     history = []
     while True:
-        user_input = ask("You").strip()
+        try:
+            user_input = ask("You").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n\nReturning to menu...")
+            break
         if not user_input:
             continue
-        if user_input.lower() in ("quit", "exit", "q"):
+        if user_input.lower() in ("quit", "exit", "q", "back"):
             break
         if user_input.lower() == "memory":
             print(f"\n{mem.build_context_prompt()}\n")
