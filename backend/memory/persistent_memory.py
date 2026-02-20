@@ -65,6 +65,12 @@ class UserMemory:
             "mentor_notes": [],       # Chronological list of observations
             # Learning history summary
             "learning_history": [],   # [{skill, date, score, summary}]
+            # Last mentor analysis (skill gaps + roadmap) — used by learning session
+            "last_mentor_analysis": {
+                "skill_gaps": [],
+                "learning_roadmap": [],
+                "recommended_roles": [],
+            },
             # Preferences learned over time
             "preferences": {
                 "learning_style": None,     # e.g. "visual", "hands-on"
@@ -97,6 +103,19 @@ class UserMemory:
         self._data["profile"].update({k: v for k, v in profile_data.items() if v})
         self.log_event("profile_update", json.dumps(profile_data))
         self.save()
+
+    def save_mentor_analysis(self, skill_gaps: list, learning_roadmap: list, recommended_roles: list):
+        """Save the full mentor analysis for use across sessions."""
+        self._data["last_mentor_analysis"] = {
+            "skill_gaps": skill_gaps,
+            "learning_roadmap": learning_roadmap,
+            "recommended_roles": recommended_roles,
+        }
+        self.save()
+
+    def get_last_analysis(self) -> dict:
+        """Return the last mentor analysis, or empty dict if none."""
+        return self._data.get("last_mentor_analysis", {})
 
     def update_skills(self, current: list = None, targets: list = None):
         if current:

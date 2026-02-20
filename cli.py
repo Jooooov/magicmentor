@@ -176,6 +176,13 @@ def flow_mentor(cv_text: str, mem) -> dict:
 def flow_learning(mem, analysis: dict = None):
     section("LEARNING SESSION")
 
+    # If no fresh analysis, load from persistent memory
+    if not analysis or not analysis.get("skill_gaps"):
+        saved = mem.get_last_analysis()
+        if saved and saved.get("skill_gaps"):
+            print("  (using skill gaps from your last mentor session)")
+            analysis = saved
+
     gap_info = None  # Will hold the mentor's gap data for the chosen skill
 
     if analysis and analysis.get("skill_gaps"):

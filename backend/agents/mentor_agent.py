@@ -116,6 +116,12 @@ Return ONLY a JSON object (no other text):
                 current=result["current_skills"],
                 targets=[{"name": g["skill"], "priority": g["priority"]} for g in result.get("skill_gaps", [])],
             )
+        # Save full analysis so learning session can use it across sessions
+        user_memory.save_mentor_analysis(
+            skill_gaps=result.get("skill_gaps", []),
+            learning_roadmap=result.get("learning_roadmap", []),
+            recommended_roles=result.get("recommended_roles", []),
+        )
         user_memory.add_session_summary(
             session_type="mentor_analysis",
             summary=f"CV analysed. {len(result.get('skill_gaps', []))} skill gaps identified.",

@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     PERPLEXITY_API_KEY: str = ""
 
     # Local MLX model (runs on Apple Silicon via mlx_lm.server)
-    LOCAL_MODEL: str = "qwen3-8b-4bit"
+    LOCAL_MODEL: str = "mlx-community/Qwen3-8B-4bit"
     LOCAL_BASE_URL: str = "http://localhost:8080/v1"
 
     # Perplexity — ONLY for tasks that need live web search
