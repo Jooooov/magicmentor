@@ -28,6 +28,7 @@ from backend.agents.learning_agent import start_learning_session, continue_learn
 from backend.agents.matching_agent import rank_jobs
 from backend.scrapers.job_scraper import scrape_jobs, get_market_insights
 from backend.memory.persistent_memory import get_user_memory
+from backend.agents.cv_updater import generate_cv_updates
 
 
 # ── Colours ─────────────────────────────────────────────────────────────────
@@ -555,6 +556,98 @@ def flow_progress(mem):
             print(f"  {dim(n['date'][:10])}  {n['note'][:120]}")
 
 
+def flow_cv_update(mem, cv_text: str):
+    section("ACTUALIZAR CV")
+
+    if not cv_text:
+        warn("Nenhum CV carregado nesta sessão. Volta ao menu e carrega o teu CV primeiro.")
+        return
+
+    # Show what we have to work with
+    completed_skills  = mem.skills.get("completed", [])
+    in_progress       = mem.skills.get("learning", [])
+    completed_courses = [c for c in mem.get_courses() if c.get("completed")]
+
+    if not completed_skills and not in_progress and not completed_courses:
+        warn("Ainda não tens progresso registado para adicionar ao CV.")
+        info("Completa sessões de aprendizagem (opção 2) ou valida skills para começar.")
+        return
+
+    divider("Progresso detectado")
+    if completed_skills:
+        print(f"  {c('Skills validadas:', GR)}  " + ", ".join(s["name"] for s in completed_skills))
+    if completed_courses:
+        print(f"  {c('Cursos concluídos:', GR)}  " + ", ".join(c["name"] for c in completed_courses))
+    if in_progress:
+        print(f"  {c('Em estudo:', YL)}  " + ", ".join(s["name"] for s in in_progress))
+
+    print()
+    go = ask("Gerar sugestões de actualização para o CV? [y/n]", "y").lower()
+    if go != "y":
+        return
+
+    print(f"\n  {c('⟳', CY)} A gerar sugestões com IA...", flush=True)
+    result = generate_cv_updates(cv_text, mem)
+
+    if result.get("nothing_yet"):
+        warn("Ainda não há progresso suficiente para sugerir actualizações.")
+        return
+
+    if result.get("raw"):
+        # Fallback: LLM didn't return valid JSON
+        divider("Sugestões (texto livre)")
+        print(f"\n{result['raw']}")
+        return
+
+    # ── Display structured suggestions ─────────────────────────────────
+    if result.get("updated_summary"):
+        divider("Resumo profissional — sugestão")
+        print(f"\n  {result['updated_summary']}\n")
+
+    if result.get("new_skills"):
+        divider("Skills a adicionar")
+        for bullet in result["new_skills"]:
+            print(f"  {c('▸', GR)}  {bullet}")
+
+    if result.get("new_courses"):
+        divider("Cursos / Certificações a adicionar")
+        for bullet in result["new_courses"]:
+            print(f"  {c('▸', GR)}  {bullet}")
+
+    if result.get("in_progress"):
+        divider("Em progresso (opcional incluir no CV)")
+        for bullet in result["in_progress"]:
+            print(f"  {c('▸', YL)}  {bullet}")
+
+    if result.get("full_skills_block"):
+        divider("Secção SKILLS actualizada — pronta a colar")
+        print()
+        for line in result["full_skills_block"].splitlines():
+            print(f"  {line}")
+
+    # ── Save to file ────────────────────────────────────────────────────
+    from datetime import datetime
+    date_str  = datetime.now().strftime("%Y-%m-%d")
+    user_dir  = Path(settings.MEMORY_DIR) / str(mem.user_id)
+    out_path  = user_dir / f"CV_update_{date_str}.md"
+
+    md_lines = [f"# CV Update Suggestions — {date_str}\n"]
+    if result.get("updated_summary"):
+        md_lines += ["## Resumo profissional\n", result["updated_summary"], ""]
+    if result.get("new_skills"):
+        md_lines += ["## Skills a adicionar\n"] + [f"- {b}" for b in result["new_skills"]] + [""]
+    if result.get("new_courses"):
+        md_lines += ["## Cursos / Certificações\n"] + [f"- {b}" for b in result["new_courses"]] + [""]
+    if result.get("in_progress"):
+        md_lines += ["## Em progresso\n"] + [f"- {b}" for b in result["in_progress"]] + [""]
+    if result.get("full_skills_block"):
+        md_lines += ["## Secção SKILLS completa\n", "```", result["full_skills_block"], "```", ""]
+
+    out_path.write_text("\n".join(md_lines), encoding="utf-8")
+    print()
+    ok(f"Sugestões guardadas em {c(str(out_path), BL)}")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -611,6 +704,7 @@ def main():
         print(f"  {c('3', WH)}  Encontrar empregos")
         print(f"  {c('4', WH)}  Chat com o mentor")
         print(f"  {c('5', WH)}  O teu progresso")
+        print(f"  {c('6', WH)}  Actualizar CV com o meu progresso")
         print(f"  {c('0', DM)}  Sair")
 
         choice = ask("Escolha")
@@ -631,6 +725,9 @@ def main():
 
         elif choice == "5":
             flow_progress(mem)
+
+        elif choice == "6":
+            flow_cv_update(mem, cv_text)
 
         elif choice == "0":
             print(f"\n  {c('Até já! Continua a aprender.', GR)}\n")
