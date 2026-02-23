@@ -65,12 +65,12 @@ else
     echo "🧠 Modelo local já está a correr."
 fi
 
-# ── Launch CLI ────────────────────────────────────────────────────────
+# ── Launch Streamlit web app ──────────────────────────────────────────
 echo ""
-echo "✨ A iniciar MagicMentor..."
+echo "✨ A iniciar MagicMentor Web App..."
 echo ""
 
-PYTHON="$(dirname "$0")/.venv/bin/python3"
+PYTHON="$(dirname "$0")/.venv/bin/python3.13"
 
 if [ ! -f "$PYTHON" ]; then
     echo "❌ Virtual environment não encontrado."
@@ -79,4 +79,11 @@ if [ ! -f "$PYTHON" ]; then
     exit 1
 fi
 
-"$PYTHON" cli.py
+# Abrir browser após 3 segundos (streamlit demora um pouco a arrancar)
+(sleep 3 && open http://localhost:8501) &
+
+"$PYTHON" -m streamlit run app.py \
+    --server.port 8501 \
+    --server.address 0.0.0.0 \
+    --server.headless true \
+    --browser.gatherUsageStats false
