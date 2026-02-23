@@ -29,6 +29,9 @@ from backend.agents.matching_agent import rank_jobs
 from backend.scrapers.job_scraper import scrape_jobs, get_market_insights
 from backend.memory.persistent_memory import get_user_memory
 from backend.agents.cv_updater import generate_cv_updates
+from backend.agents.assessment_agent import (
+    start_assessment, continue_assessment, build_gap_entries, ASSESSMENT_TOPICS,
+)
 
 
 # ── Colours ─────────────────────────────────────────────────────────────────
@@ -234,6 +237,146 @@ def flow_mentor(cv_text: str, mem) -> dict:
     return result
 
 
+# ── Assessment flow ──────────────────────────────────────────────────────────
+
+def flow_assessment(mem):
+    section("DIAGNÓSTICO DE CONHECIMENTOS")
+    print(f"  {dim('Testa os teus conhecimentos num tópico específico.')}")
+    print(f"  {dim('O quiz diagnóstico identifica lacunas que aparecem na sessão de aprendizagem.')}\n")
+
+    # Show topic list
+    divider("Escolhe o tópico")
+    for i, topic in enumerate(ASSESSMENT_TOPICS, 1):
+        subtopics_str = dim(", ".join(topic["subtopics"][:3]) + ("…" if len(topic["subtopics"]) > 3 else ""))
+        print(f"  {c(str(i), WH)}  {bold(topic['label'])}  {subtopics_str}")
+
+    # Show past results if available
+    history = mem.get_assessment_history()
+    if history:
+        divider("Diagnósticos anteriores")
+        for rec in history[-3:]:
+            sc      = rec.get("overall_score", 0)
+            date    = rec.get("assessed_at", "")[:10]
+            colour  = GR if sc >= 70 else (YL if sc >= 50 else RD)
+            print(f"  {dim(date)}  {rec['skill']}  {c(bold(str(sc) + '/100'), colour)}  {bar(sc, width=8)}")
+
+    print()
+    raw = ask("Escolhe o número do tópico")
+    if not raw:
+        return
+    try:
+        topic_idx = int(raw) - 1
+        if topic_idx < 0 or topic_idx >= len(ASSESSMENT_TOPICS):
+            err("Número inválido.")
+            return
+    except ValueError:
+        err("Número inválido.")
+        return
+
+    topic = ASSESSMENT_TOPICS[topic_idx]
+    skill = topic["label"]
+
+    divider(f"Diagnóstico · {skill}")
+    print(f"  {dim('Responde às perguntas. Escreve')} {c('sair', CY)} {dim('para parar a qualquer momento.')}\n")
+    print(f"  {c('─' * 50, DM)}\n")
+
+    # Start assessment
+    print(f"  {c('⟳', CY)} A iniciar diagnóstico...\n")
+    session = start_assessment(topic, user_memory=mem)
+    history_msgs = session["history"]
+
+    # Print first question
+    print(f"  {c('Assessor', MG)}  {session['message']}\n")
+    print(f"  {c('─' * 50, DM)}\n")
+
+    # State accumulated across turns
+    final_score      = None
+    subtopic_scores  = {}
+    gaps             = []
+
+    # Conversation loop
+    while True:
+        try:
+            user_input = ask("Tu").strip()
+        except (KeyboardInterrupt, EOFError):
+            print(f"\n  {dim('Diagnóstico interrompido.')}")
+            break
+        if not user_input:
+            continue
+        if user_input.lower() in ("sair", "quit", "exit", "q", "back"):
+            print(f"\n  {dim('Diagnóstico cancelado.')}")
+            break
+
+        result       = continue_assessment(user_input, history_msgs, skill, user_memory=mem)
+        history_msgs = result["history"]
+
+        # Accumulate markers (only emitted on final turn)
+        if result.get("score") is not None:
+            final_score = result["score"]
+        if result.get("subtopic_scores"):
+            subtopic_scores = result["subtopic_scores"]
+        if result.get("gaps"):
+            gaps = result["gaps"]
+
+        # Strip marker lines from displayed message
+        display_msg = "\n".join(
+            line for line in result["message"].splitlines()
+            if not any(line.strip().startswith(m) for m in
+                       ["[ASSESSMENT_SCORE:", "[SUBTOPIC_SCORES:", "[GAPS:", "[ASSESSMENT_COMPLETE]"])
+        ).strip()
+
+        print(f"\n  {c('Assessor', MG)}  {display_msg}\n")
+        print(f"  {c('─' * 50, DM)}\n")
+
+        if result.get("complete"):
+            break
+
+    # ── Report ────────────────────────────────────────────────────────────────
+    if final_score is None:
+        info("Diagnóstico incompleto — sem pontuação para guardar.")
+        return
+
+    divider("RESULTADO DO DIAGNÓSTICO")
+    score_colour = GR if final_score >= 70 else (YL if final_score >= 50 else RD)
+    print(f"\n  {bold('Pontuação geral')}  {c(bold(str(final_score) + '/100'), score_colour)}  {bar(final_score)}\n")
+
+    if subtopic_scores:
+        divider("Por sub-tópico (pior primeiro)")
+        sorted_subs = sorted(subtopic_scores.items(), key=lambda x: x[1])
+        for sub, sc in sorted_subs:
+            sub_col = GR if sc >= 70 else (YL if sc >= 50 else RD)
+            gap_tag = f"  {c('LACUNA', RD)}" if sc < 70 else ""
+            print(f"  {bar(sc, width=8)}  {c(str(sc).rjust(3), sub_col)}/100  {sub}{gap_tag}")
+
+    gap_entries = build_gap_entries(skill, subtopic_scores, gaps, final_score)
+
+    if gap_entries:
+        divider(f"Lacunas identificadas  ({len(gap_entries)})")
+        for entry in gap_entries:
+            num  = c(f"#{entry['priority']}", MG)
+            time = dim(entry.get("estimated_learning_time", "?"))
+            sc   = entry.get("assessed_score", 0)
+            print(f"\n  {num}  {bold(entry['skill'])}")
+            print(f"      {c(str(sc) + '/100', RD)}  {bar(sc, width=8)}  {time}")
+            print(f"      {dim(entry.get('reason', ''))}")
+    else:
+        ok("Sem lacunas significativas identificadas! Bom trabalho.")
+
+    # Save to memory
+    mem.save_assessment(skill, final_score, subtopic_scores, gap_entries)
+    mem.add_session_summary(
+        session_type="assessment",
+        summary=f"Diagnóstico {skill}: {final_score}/100. {len(gap_entries)} lacunas identificadas.",
+        key_insights=[f"{sub}: {sc}/100" for sub, sc in (subtopic_scores or {}).items()],
+    )
+
+    print()
+    if gap_entries:
+        ok(f"{len(gap_entries)} lacunas guardadas — aparecem na Sessão de Aprendizagem (opção 2).")
+    else:
+        ok("Resultado guardado.")
+
+
 # ── Learning helpers ─────────────────────────────────────────────────────────
 
 def _build_mentor_context(skill: str, gap_info: dict, analysis: dict) -> str:
@@ -304,6 +447,21 @@ def flow_learning(mem, analysis: dict = None):
             idx = len(options) + 1
             print(f"  {c(str(idx), WH)}  {bold(cs['skill'])}")
             options.append({"skill": cs["skill"], "gap_info": None, "resume": False, "level": "beginner"})
+
+    # 4. Assessment gaps
+    assessment_gaps = mem.get_assessment_gaps()
+    if assessment_gaps:
+        divider("Gaps identificados por diagnóstico")
+        for ag in assessment_gaps[:6]:
+            skill_name = ag["skill"]
+            if any(o["skill"].lower() == skill_name.lower() for o in options):
+                continue
+            sc       = ag.get("assessed_score", 0)
+            time_est = dim(ag.get("estimated_learning_time", ""))
+            sc_str   = c(str(sc) + "/100", RD)
+            idx      = len(options) + 1
+            print(f"  {c(str(idx), WH)}  {c('⚡', RD)}  {bold(skill_name)}  {sc_str}  {time_est}")
+            options.append({"skill": skill_name, "gap_info": ag, "resume": False, "level": "beginner"})
 
     print()
     if not options:
@@ -705,6 +863,7 @@ def main():
         print(f"  {c('4', WH)}  Chat com o mentor")
         print(f"  {c('5', WH)}  O teu progresso")
         print(f"  {c('6', WH)}  Actualizar CV com o meu progresso")
+        print(f"  {c('7', WH)}  Testar conhecimentos  {dim('(diagnóstico adaptativo)')}")
         print(f"  {c('0', DM)}  Sair")
 
         choice = ask("Escolha")
@@ -728,6 +887,9 @@ def main():
 
         elif choice == "6":
             flow_cv_update(mem, cv_text)
+
+        elif choice == "7":
+            flow_assessment(mem)
 
         elif choice == "0":
             print(f"\n  {c('Até já! Continua a aprender.', GR)}\n")

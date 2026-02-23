@@ -84,6 +84,10 @@ class UserMemory:
             "courses": [],  # [{skill, name, url, free, type, completed, completed_at}]
             # Session summaries (to avoid loading full transcripts)
             "session_summaries": [],  # [{date, type, summary, key_insights}]
+            # Knowledge assessment history
+            "assessments": [],        # [{skill, assessed_at, overall_score, subtopic_scores, gap_count}]
+            # Live gaps from assessments (same format as mentor skill_gaps)
+            "assessment_gaps": [],    # [{skill, priority, reason, source="assessment", assessed_score, ...}]
         }
 
     def save(self):
@@ -224,6 +228,49 @@ class UserMemory:
         }
         self.save()
 
+    # ── Assessment tracking ────────────────────────────────────────────────────
+
+    def save_assessment(
+        self,
+        skill: str,
+        overall_score: int,
+        subtopic_scores: dict,
+        gap_entries: list,
+    ):
+        """
+        Persist assessment results.
+        - Appends a summary to assessments[]
+        - Replaces assessment_gaps for this skill, keeps other topics' gaps
+        """
+        self._data.setdefault("assessments", []).append({
+            "skill":           skill,
+            "assessed_at":     datetime.utcnow().isoformat(),
+            "overall_score":   overall_score,
+            "subtopic_scores": subtopic_scores,
+            "gap_count":       len(gap_entries),
+        })
+        # Keep only last 20 assessment records
+        self._data["assessments"] = self._data["assessments"][-20:]
+
+        # Replace gaps for this skill, keep other topics
+        existing = [
+            g for g in self._data.get("assessment_gaps", [])
+            if not g.get("skill", "").startswith(skill)
+        ]
+        self._data["assessment_gaps"] = existing + gap_entries
+
+        self.log_event(
+            "assessment_complete",
+            f"{skill} — score: {overall_score}/100, gaps: {len(gap_entries)}",
+        )
+        self.save()
+
+    def get_assessment_gaps(self) -> list:
+        return self._data.get("assessment_gaps", [])
+
+    def get_assessment_history(self) -> list:
+        return self._data.get("assessments", [])
+
     def get_last_analysis(self) -> dict:
         """Return the last mentor analysis. Falls back to targets from memory if full analysis not saved yet."""
         saved = self._data.get("last_mentor_analysis", {})
@@ -320,6 +367,11 @@ class UserMemory:
         if completed:
             done = ", ".join(s.get("name", "") for s in completed[-5:])
             lines.append(f"Recently validated skills: {done}")
+
+        assessment_gaps = d.get("assessment_gaps", [])
+        if assessment_gaps:
+            top = ", ".join(g["skill"] for g in assessment_gaps[:4])
+            lines.append(f"Assessment-identified gaps: {top}")
 
         learning = d["skills"].get("learning", [])
         if learning:
