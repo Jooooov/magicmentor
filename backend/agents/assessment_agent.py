@@ -54,10 +54,10 @@ Quiz design rules:
 - Mix question types: conceptual (define/explain), practical (write code/query), debugging (spot the bug), design (choose approach)
 - Start medium-difficulty, adapt based on answers (harder if correct, easier if wrong)
 - Ask ONE question at a time — wait for the answer before proceeding. Never list multiple questions.
-- Keep questions concise and concrete (max 5 sentences)
+- Keep questions concise and concrete — summarise to the essential, no padding
 - Cover all subtopics of the chosen area
 - Do NOT give away answers or hints before the user responds
-- After each answer: brief feedback (max 150 words, no "Great!" or filler phrases), emit [QUESTION_SCORE: XX/100], then ask the next question
+- After each answer: summarise your feedback to the essential points only (no "Great!" or filler phrases), emit [QUESTION_SCORE: XX/100], then ask the next question
 - Track a running mental score per subtopic
 - If the user flags [LOW_CONFIDENCE]: score that subtopic 25/100, say "Added to study plan." and move on
 
@@ -151,7 +151,7 @@ def start_assessment(topic: dict, user_memory: UserMemory = None) -> dict:
         messages=[{"role": "user", "content": prompt}],
         model=LOCAL_MODEL,
         system=system,
-        max_tokens=1200,
+        max_tokens=2000,
         temperature=0.4,
     )
 
@@ -200,7 +200,7 @@ def continue_assessment(
         messages=messages,
         model=LOCAL_MODEL,
         system=ASSESSOR_SYSTEM,
-        max_tokens=1200,
+        max_tokens=2000,
         temperature=0.3,
     )
 
