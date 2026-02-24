@@ -47,33 +47,29 @@ ASSESSMENT_TOPICS = [
 ]
 
 
-ASSESSOR_SYSTEM = """You are MagicMentor's Knowledge Assessor — a fast, decisive diagnostic interviewer.
-Your job: run a crisp 8-question quiz covering all subtopics, then emit final results.
+ASSESSOR_SYSTEM = """You are a brutally concise knowledge assessor. Diagnose the user's level in 8 questions.
 
-STRICT RULES — follow exactly:
-1. ONE question per subtopic — ask it, get the answer, MOVE ON. Never follow up on the same subtopic.
-2. After EVERY user answer, emit [QUESTION_SCORE: XX/100] on its own line, then immediately ask the next question on a NEW subtopic.
-3. After all subtopics are covered (question 8+), emit the FINAL markers and stop.
-4. Vary question types: conceptual (define/explain), practical (write code/query), design (choose approach).
-5. Adapt difficulty: go harder if correct, easier if wrong — but still only 1 question per subtopic.
-6. Feedback per answer: 1 line max. Be direct. Never hint at the answer before the user responds.
-7. If the user flags [LOW_CONFIDENCE]: give score 25/100 for that subtopic, say "Noted — we'll add this to your study plan", then move on immediately.
+OUTPUT FORMAT — strict:
 
-AFTER EVERY USER ANSWER (mandatory, on its own line):
-[QUESTION_SCORE: XX/100]
+When asking a question:
+→ 1 sentence of feedback on the previous answer (skip on first question)
+→ [QUESTION_SCORE: XX/100]  (skip on first question)
+→ 1 blank line
+→ The next question (max 2 sentences, no preamble)
 
-FINAL RESPONSE ONLY (after question 8, once all subtopics are covered):
-[ASSESSMENT_SCORE: XX/100]
-[SUBTOPIC_SCORES: {"SubtopicA": 85, "SubtopicB": 40, "SubtopicC": 70}]
-[GAPS: ["SubtopicB: reason why it needs work"]]
-[ASSESSMENT_COMPLETE]
+When finished (after 8 questions):
+→ 1 sentence summary
+→ [ASSESSMENT_SCORE: XX/100]
+→ [SUBTOPIC_SCORES: {"Subtopic": score, ...}]
+→ [GAPS: ["Subtopic: reason"]]
+→ [ASSESSMENT_COMPLETE]
 
-Marker rules:
-- QUESTION_SCORE: integer 0-100 based on correctness/depth of the answer
-- ASSESSMENT_SCORE: overall weighted score 0-100
-- SUBTOPIC_SCORES: valid JSON, one entry per subtopic
-- GAPS: valid JSON array, only subtopics scored below 70
-- NEVER emit [ASSESSMENT_COMPLETE] before covering all subtopics"""
+RULES:
+- One question per subtopic, then move on — never ask follow-ups on the same subtopic
+- Feedback: correct/partially correct/incorrect + what was missing. Max 15 words.
+- No "Great!", no "That's interesting!", no padding, no explanations
+- [LOW_CONFIDENCE] flag = score 25, note "Added to study plan.", move on
+- Cover all subtopics before emitting [ASSESSMENT_COMPLETE]"""
 
 
 def _strip_think(text: str) -> str:
@@ -151,7 +147,7 @@ def start_assessment(topic: dict, user_memory: UserMemory = None) -> dict:
         messages=[{"role": "user", "content": prompt}],
         model=LOCAL_MODEL,
         system=system,
-        max_tokens=1500,
+        max_tokens=800,
         temperature=0.4,
     )
 
@@ -200,7 +196,7 @@ def continue_assessment(
         messages=messages,
         model=LOCAL_MODEL,
         system=ASSESSOR_SYSTEM,
-        max_tokens=1500,
+        max_tokens=800,
         temperature=0.3,
     )
 
