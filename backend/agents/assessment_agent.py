@@ -47,32 +47,43 @@ ASSESSMENT_TOPICS = [
 ]
 
 
-ASSESSOR_SYSTEM = """You are MagicMentor's Knowledge Assessor — an expert diagnostic interviewer.
-Your job is to run a focused 8-12 question adaptive quiz to diagnose the user's real knowledge level.
+ASSESSOR_SYSTEM = """You are MagicMentor's Knowledge Assessor — a fast, decisive diagnostic interviewer.
+Your job: run a crisp 8-question quiz covering all subtopics, then emit final results.
 
-Quiz design rules:
-- Mix question types: conceptual (define/explain), practical (write code/query), debugging (spot the bug), design (choose approach)
-- Start medium-difficulty, adapt based on answers (harder if correct, easier if wrong)
-- Ask ONE question at a time — wait for the answer before proceeding
-- Keep questions concise and concrete
-- Cover all subtopics of the chosen area
-- Do NOT give away answers or hints before the user responds
-- After each answer: brief feedback (1-2 lines max), then immediately ask the next question
-- Track a running mental score per subtopic
+STRICT RULES — follow exactly:
+1. ONE question per subtopic — ask it, get the answer, MOVE ON. Never follow up on the same subtopic.
+2. After EVERY user answer, emit [QUESTION_SCORE: XX/100] on its own line, then immediately ask the next question on a NEW subtopic.
+3. After all subtopics are covered (question 8+), emit the FINAL markers and stop.
+4. Vary question types: conceptual (define/explain), practical (write code/query), design (choose approach).
+5. Adapt difficulty: go harder if correct, easier if wrong — but still only 1 question per subtopic.
+6. Feedback per answer: 1 line max. Be direct. Never hint at the answer before the user responds.
+7. If the user flags [LOW_CONFIDENCE]: give score 25/100 for that subtopic, say "Noted — we'll add this to your study plan", then move on immediately.
 
-FINAL TURN (after 8-12 questions, or when you have enough diagnostic data):
-At the very end of your final feedback message, emit ALL FOUR markers on separate lines:
+AFTER EVERY USER ANSWER (mandatory, on its own line):
+[QUESTION_SCORE: XX/100]
+
+FINAL RESPONSE ONLY (after question 8, once all subtopics are covered):
 [ASSESSMENT_SCORE: XX/100]
 [SUBTOPIC_SCORES: {"SubtopicA": 85, "SubtopicB": 40, "SubtopicC": 70}]
-[GAPS: ["SubtopicB: reason why it needs work", "SubtopicC: partial gap description"]]
+[GAPS: ["SubtopicB: reason why it needs work"]]
 [ASSESSMENT_COMPLETE]
 
 Marker rules:
-- ASSESSMENT_SCORE: overall weighted score 0-100 (integer only)
-- SUBTOPIC_SCORES: valid JSON object mapping each subtopic name to score 0-100
-- GAPS: valid JSON array of strings — only list subtopics that scored below 70
-- Emit all four markers only on the FINAL turn, once you have asked at least 8 questions
-- Never emit [ASSESSMENT_COMPLETE] early"""
+- QUESTION_SCORE: integer 0-100 based on correctness/depth of the answer
+- ASSESSMENT_SCORE: overall weighted score 0-100
+- SUBTOPIC_SCORES: valid JSON, one entry per subtopic
+- GAPS: valid JSON array, only subtopics scored below 70
+- NEVER emit [ASSESSMENT_COMPLETE] before covering all subtopics"""
+
+
+def _strip_think(text: str) -> str:
+    """Remove <think>...</think> block emitted by Qwen3. Returns content after it."""
+    if "</think>" in text:
+        return text.split("</think>", 1)[1].strip()
+    if "<think>" in text:
+        # think block not closed — drop everything inside
+        return text.split("<think>", 1)[0].strip()
+    return text
 
 
 def _extract_bracketed_json(text: str, marker: str):
@@ -139,17 +150,19 @@ def start_assessment(topic: dict, user_memory: UserMemory = None) -> dict:
         messages=[{"role": "user", "content": prompt}],
         model=LOCAL_MODEL,
         system=system,
-        max_tokens=1024,
+        max_tokens=512,
         temperature=0.4,
     )
 
+    clean_response = _strip_think(response_text)
+
     history = [
         {"role": "user",      "content": prompt},
-        {"role": "assistant", "content": response_text},
+        {"role": "assistant", "content": clean_response},
     ]
 
     return {
-        "message":         response_text,
+        "message":         clean_response,
         "history":         history,
         "skill":           topic["label"],
         "complete":        False,
@@ -186,39 +199,50 @@ def continue_assessment(
         messages=messages,
         model=LOCAL_MODEL,
         system=ASSESSOR_SYSTEM,
-        max_tokens=1024,
+        max_tokens=768,
         temperature=0.3,
     )
 
-    messages.append({"role": "assistant", "content": response_text})
+    # Strip Qwen3 <think> block before storing and parsing
+    clean_response = _strip_think(response_text)
+    messages.append({"role": "assistant", "content": clean_response})
 
     # ── Parse markers ──────────────────────────────────────────────────────────
-    complete        = "[ASSESSMENT_COMPLETE]" in response_text
+    complete        = "[ASSESSMENT_COMPLETE]" in clean_response
     score           = None
+    question_score  = None
     subtopic_scores = {}
     gaps            = []
 
-    if "[ASSESSMENT_SCORE:" in response_text:
+    if "[QUESTION_SCORE:" in clean_response:
         try:
-            score_str = response_text.split("[ASSESSMENT_SCORE:")[1].split("]")[0]
+            qs_str = clean_response.split("[QUESTION_SCORE:")[1].split("]")[0]
+            question_score = int(qs_str.strip().split("/")[0])
+        except (IndexError, ValueError):
+            pass
+
+    if "[ASSESSMENT_SCORE:" in clean_response:
+        try:
+            score_str = clean_response.split("[ASSESSMENT_SCORE:")[1].split("]")[0]
             score = int(score_str.strip().split("/")[0])
         except (IndexError, ValueError):
             pass
 
-    parsed_subtopics = _extract_bracketed_json(response_text, "[SUBTOPIC_SCORES:")
+    parsed_subtopics = _extract_bracketed_json(clean_response, "[SUBTOPIC_SCORES:")
     if isinstance(parsed_subtopics, dict):
         subtopic_scores = parsed_subtopics
 
-    parsed_gaps = _extract_bracketed_json(response_text, "[GAPS:")
+    parsed_gaps = _extract_bracketed_json(clean_response, "[GAPS:")
     if isinstance(parsed_gaps, list):
         gaps = parsed_gaps
 
     return {
-        "message":         response_text,
+        "message":         clean_response,
         "history":         messages,
         "skill":           skill,
         "complete":        complete,
         "score":           score,
+        "question_score":  question_score,
         "subtopic_scores": subtopic_scores,
         "gaps":            gaps,
     }

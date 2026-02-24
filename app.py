@@ -39,28 +39,96 @@ from backend.parsers.cv_parser import extract_text_from_pdf
 # ── Farm Rio CSS ──────────────────────────────────────────────────────────────
 _CSS = """
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+
 :root {
-    --coral:  #FF6B35;
-    --gold:   #FFD700;
-    --green:  #2ECC71;
-    --pink:   #FF6EB4;
-    --purple: #9B59B6;
-    --cream:  #FFFEF7;
+    --coral:    #FF6B35;
+    --gold:     #FFD700;
+    --green:    #2ECC71;
+    --pink:     #FF6EB4;
+    --purple:   #9B59B6;
+    --teal:     #00BFA5;
+    --orange:   #FF8C42;
+    --cream:    #FFF8F0;
+    --leaf:     #4CAF50;
 }
 
 /* Hide Streamlit chrome */
 #MainMenu, footer, header { visibility: hidden; }
 
-/* Background */
-body, .stApp { background-color: var(--cream) !important; }
+/* Tropical gradient background */
+body, .stApp {
+    background: linear-gradient(135deg,
+        #FFF0E6 0%,
+        #FFF8F0 25%,
+        #F0FFF4 50%,
+        #FFF0F8 75%,
+        #FFF8E1 100%) !important;
+    background-attachment: fixed !important;
+    font-family: 'Nunito', sans-serif !important;
+}
+
+/* Decorative top bar */
+.stApp::before {
+    content: '';
+    display: block;
+    height: 5px;
+    background: linear-gradient(90deg,
+        var(--coral), var(--gold), var(--green),
+        var(--pink), var(--teal), var(--coral));
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 9999;
+}
 
 /* Cards */
 .mm-card {
-    background: white;
+    background: rgba(255,255,255,0.82);
+    backdrop-filter: blur(6px);
     border-radius: 20px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1.5px solid rgba(255,107,53,0.12);
+    box-shadow: 0 4px 24px rgba(255,107,53,0.08);
     padding: 1.1rem 1.3rem;
     margin: 0.5rem 0;
+}
+
+/* Quiz question card — tropical highlight */
+.mm-card-question {
+    background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,240,230,0.6));
+    backdrop-filter: blur(6px);
+    border-radius: 20px;
+    border-left: 4px solid var(--coral);
+    box-shadow: 0 4px 24px rgba(255,107,53,0.12);
+    padding: 1.2rem 1.4rem;
+    margin: 0.5rem 0;
+    font-size: 1.05rem;
+    line-height: 1.6;
+}
+
+/* Score badge */
+.q-score-badge {
+    display: inline-block;
+    padding: 4px 16px;
+    border-radius: 30px;
+    font-size: 1rem;
+    font-weight: 800;
+    margin: 0.5rem 0;
+}
+.q-score-high   { background: #E8F8F0; color: #1E8449; border: 2px solid #2ECC71; }
+.q-score-mid    { background: #FEF9E7; color: #B7950B; border: 2px solid #F4D03F; }
+.q-score-low    { background: #FDEDEC; color: #C0392B; border: 2px solid #E74C3C; }
+.q-score-flag   { background: #EEF2FF; color: #5B6EAE; border: 2px solid #9B59B6; }
+
+/* Low confidence flag pill */
+.low-conf-pill {
+    display: inline-block;
+    background: linear-gradient(90deg, #9B59B6, #8E44AD);
+    color: white;
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin-left: 8px;
 }
 
 /* Skill tags */
@@ -78,62 +146,83 @@ body, .stApp { background-color: var(--cream) !important; }
 .mm-tag-green  { background: var(--green); }
 .mm-tag-pink   { background: var(--pink); }
 .mm-tag-gold   { background: #C9A800; }
+.mm-tag-teal   { background: var(--teal); }
 
 /* Primary buttons — coral pill */
 .stButton > button {
-    background: var(--coral) !important;
+    background: linear-gradient(135deg, var(--coral), var(--orange)) !important;
     color: white !important;
     border: none !important;
     border-radius: 30px !important;
     font-weight: 700 !important;
     width: 100% !important;
     padding: 0.55rem 1rem !important;
-    transition: opacity 0.18s;
+    transition: all 0.2s;
+    box-shadow: 0 3px 12px rgba(255,107,53,0.25) !important;
 }
-.stButton > button:hover   { opacity: 0.85; }
+.stButton > button:hover {
+    opacity: 0.88;
+    box-shadow: 0 5px 18px rgba(255,107,53,0.35) !important;
+    transform: translateY(-1px);
+}
 .stButton > button:disabled {
     background: #ddd !important;
     color: #999 !important;
+    box-shadow: none !important;
 }
 
-/* Bottom nav bar (wraps Streamlit columns) */
-[data-testid="stBottom"] { display: none; }   /* suppress any built-in */
+/* "Não me sinto confiante" button — purple ghost */
+.btn-lowconf .stButton > button {
+    background: linear-gradient(135deg, #9B59B6, #8E44AD) !important;
+    box-shadow: 0 3px 12px rgba(155,89,182,0.25) !important;
+    font-size: 0.88rem !important;
+}
+.btn-lowconf .stButton > button:hover {
+    box-shadow: 0 5px 18px rgba(155,89,182,0.35) !important;
+}
+
+/* Bottom nav bar */
+[data-testid="stBottom"] { display: none; }
 
 .nav-bar-wrap {
     position: fixed;
     bottom: 0; left: 0; right: 0;
-    background: white;
-    border-top: 1px solid #e8e8e8;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(10px);
+    border-top: 2px solid rgba(255,107,53,0.15);
     padding: 6px 8px 12px;
     z-index: 1000;
 }
-/* smaller, ghost-style buttons inside nav */
 .nav-bar-wrap .stButton > button {
     background: transparent !important;
-    color: #555 !important;
+    color: #666 !important;
     border-radius: 10px !important;
     font-size: 0.68rem !important;
     padding: 4px 2px !important;
     box-shadow: none !important;
     border: none !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
 }
 .nav-bar-wrap .stButton > button:hover {
-    background: #f0f0f0 !important;
-    opacity: 1 !important;
+    background: rgba(255,107,53,0.08) !important;
     color: var(--coral) !important;
+    opacity: 1 !important;
+    transform: none;
 }
 
 /* Push content up so fixed nav doesn't overlap */
-.main .block-container { padding-bottom: 100px !important; }
+.main .block-container { padding-bottom: 110px !important; padding-top: 1.5rem !important; }
 
 /* Score colours */
 .score-high { color: var(--green);  font-weight: 700; }
 .score-mid  { color: #C9A800;       font-weight: 700; }
-.score-low  { color: var(--pink);   font-weight: 700; }
+.score-low  { color: #E74C3C;       font-weight: 700; }
 
-h1 { color: var(--coral); }
-h2, h3 { color: #333; }
+h1 { color: var(--coral); font-weight: 800; }
+h2, h3 { color: #444; }
+
+/* Progress bar tropical */
+.stProgress > div > div { background: linear-gradient(90deg, var(--coral), var(--gold)) !important; }
 </style>
 """
 
@@ -150,14 +239,16 @@ _DEFAULTS: dict = {
     "analysis":       {},
     "chat_history":   [],
     # Assessment state machine
-    "quiz_state":     "selecting",
-    "quiz_topic":     None,
-    "quiz_history":   [],
-    "quiz_skill":     "",
-    "quiz_score":     None,
-    "quiz_subtopics": {},
-    "quiz_gaps":      [],
-    "quiz_q_count":   0,
+    "quiz_state":      "selecting",
+    "quiz_topic":      None,
+    "quiz_history":    [],
+    "quiz_skill":      "",
+    "quiz_score":      None,
+    "quiz_subtopics":  {},
+    "quiz_gaps":       [],
+    "quiz_q_count":    0,
+    "quiz_last_q_score": None,   # score for the last answered question
+    "quiz_low_conf":   [],        # list of subtopics flagged as low confidence
     # MLX server status (None = unchecked)
     "mlx_ok":         None,
 }
@@ -350,14 +441,16 @@ def _assess_selecting():
                     with st.spinner(f"A preparar {topic['label']}..."):
                         result = start_assessment(topic, mem)
                     st.session_state.update({
-                        "quiz_state":     "quizzing",
-                        "quiz_topic":     topic,
-                        "quiz_skill":     result["skill"],
-                        "quiz_history":   result["history"],
-                        "quiz_score":     None,
-                        "quiz_subtopics": {},
-                        "quiz_gaps":      [],
-                        "quiz_q_count":   1,
+                        "quiz_state":        "quizzing",
+                        "quiz_topic":        topic,
+                        "quiz_skill":        result["skill"],
+                        "quiz_history":      result["history"],
+                        "quiz_score":        None,
+                        "quiz_subtopics":    {},
+                        "quiz_gaps":         [],
+                        "quiz_q_count":      1,
+                        "quiz_last_q_score": None,
+                        "quiz_low_conf":     [],
                     })
                     st.rerun()
 
@@ -381,37 +474,89 @@ def _assess_selecting():
 
 # ── Quizzing ──────────────────────────────────────────────────────────────────
 def _assess_quizzing():
-    skill   = st.session_state["quiz_skill"]
-    q_count = st.session_state["quiz_q_count"]
-    history = st.session_state["quiz_history"]
+    skill    = st.session_state["quiz_skill"]
+    q_count  = st.session_state["quiz_q_count"]
+    history  = st.session_state["quiz_history"]
+    last_qs  = st.session_state.get("quiz_last_q_score")
+    low_conf = st.session_state.get("quiz_low_conf", [])
 
     st.markdown(f"# 🧪 {skill} · Pergunta {q_count}")
-    st.progress(min(q_count / 10, 1.0))
+    st.progress(min(q_count / 8, 1.0))
 
-    # Find last assistant message
+    # ── Show score from previous answer ──────────────────────────────────────
+    if last_qs is not None:
+        if last_qs >= 70:
+            badge_cls, icon = "q-score-high", "✅"
+        elif last_qs >= 40:
+            badge_cls, icon = "q-score-mid",  "🟡"
+        else:
+            badge_cls, icon = "q-score-low",  "🔴"
+        st.markdown(
+            f'<span class="q-score-badge {badge_cls}">{icon} Resposta anterior: {last_qs}/100</span>',
+            unsafe_allow_html=True,
+        )
+
+    if low_conf:
+        st.markdown(
+            f'<small>📚 Marcados para estudo: '
+            + "".join(f'<span class="low-conf-pill">{t}</span>' for t in low_conf)
+            + "</small>",
+            unsafe_allow_html=True,
+        )
+
+    # ── Find last assistant message & strip markers for display ──────────────
     last_q = ""
     for msg in reversed(history):
         if msg.get("role") == "assistant":
             last_q = msg.get("content", "")
             break
 
-    # Strip marker tags from display
-    display_q = re.sub(r"\[ASSESSMENT_[^\]]+\]", "", last_q).strip()
-    _card(display_q)
+    display_q = re.sub(r"\[(?:ASSESSMENT|QUESTION)_[^\]]+\]", "", last_q).strip()
+    st.markdown(f'<div class="mm-card-question">{display_q}</div>', unsafe_allow_html=True)
 
+    # ── Answer form ───────────────────────────────────────────────────────────
     with st.form("quiz_form", clear_on_submit=True):
-        answer   = st.text_area("A tua resposta:", height=120,
-                                placeholder="Escreve aqui...")
-        col1, col2 = st.columns([3, 1])
+        answer = st.text_area("A tua resposta:", height=120,
+                              placeholder="Escreve aqui o que sabes...")
+        col1, col2, col3 = st.columns([3, 2, 1])
         with col1:
-            submitted = st.form_submit_button("Submeter Resposta")
+            submitted = st.form_submit_button("✅ Submeter")
         with col2:
-            exit_btn  = st.form_submit_button("Sair")
+            low_conf_btn = st.form_submit_button("😅 Não me sinto confiante")
+        with col3:
+            exit_btn = st.form_submit_button("Sair")
 
     if exit_btn:
         st.session_state["quiz_state"] = "selecting"
         st.rerun()
 
+    # ── Handle "não me sinto confiante" ──────────────────────────────────────
+    if low_conf_btn:
+        flag_text = (answer.strip() + "\n\n[LOW_CONFIDENCE]") if answer.strip() \
+                    else "[LOW_CONFIDENCE] — não me sinto confiante neste tópico"
+        with st.spinner("A registar... 🌺"):
+            result = continue_assessment(
+                flag_text,
+                st.session_state["quiz_history"],
+                skill,
+                st.session_state["mem"],
+            )
+        st.session_state["quiz_history"]    = result["history"]
+        st.session_state["quiz_q_count"]   += 1
+        st.session_state["quiz_last_q_score"] = 25  # always low-conf score
+        # Record which question number was flagged
+        current_low = st.session_state.get("quiz_low_conf", [])
+        current_low.append(f"Q{q_count}")
+        st.session_state["quiz_low_conf"] = current_low
+        if result.get("subtopic_scores"):
+            st.session_state["quiz_subtopics"].update(result["subtopic_scores"])
+        if result.get("gaps"):
+            st.session_state["quiz_gaps"] = result["gaps"]
+        if result.get("complete"):
+            st.session_state["quiz_state"] = "results"
+        st.rerun()
+
+    # ── Handle normal submit ──────────────────────────────────────────────────
     if submitted and answer.strip():
         with st.spinner("A avaliar... 🌺"):
             result = continue_assessment(
@@ -421,8 +566,9 @@ def _assess_quizzing():
                 st.session_state["mem"],
             )
 
-        st.session_state["quiz_history"]  = result["history"]
-        st.session_state["quiz_q_count"] += 1
+        st.session_state["quiz_history"]       = result["history"]
+        st.session_state["quiz_q_count"]      += 1
+        st.session_state["quiz_last_q_score"]  = result.get("question_score")
 
         if result.get("score") is not None:
             st.session_state["quiz_score"] = result["score"]
@@ -465,6 +611,16 @@ def _assess_results():
                 f"<span style='font-family:monospace'>{bar}</span> &nbsp;"
                 f"<span class='{sub_cls}'>{sub_score}</span>{gap_icon}"
             )
+
+    # Show low-confidence flags if any
+    low_conf = st.session_state.get("quiz_low_conf", [])
+    if low_conf:
+        st.markdown(
+            f'<div class="mm-card">📚 <b>Marcados para estudo</b> (baixa confiança): '
+            + "".join(f'<span class="low-conf-pill">{t}</span>' for t in low_conf)
+            + "</div>",
+            unsafe_allow_html=True,
+        )
 
     col1, col2 = st.columns(2)
     with col1:
