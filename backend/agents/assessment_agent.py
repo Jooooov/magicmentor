@@ -77,12 +77,13 @@ Marker rules:
 
 
 def _strip_think(text: str) -> str:
-    """Remove <think>...</think> block emitted by Qwen3. Returns content after it."""
+    """Remove <think>...</think> block emitted by Qwen3. Returns content after it.
+    If the block is not closed (truncated by max_tokens), returns the original text."""
     if "</think>" in text:
-        return text.split("</think>", 1)[1].strip()
-    if "<think>" in text:
-        # think block not closed — drop everything inside
-        return text.split("<think>", 1)[0].strip()
+        after = text.split("</think>", 1)[1].strip()
+        return after if after else text  # fallback if nothing after </think>
+    # Think block not closed — model ran out of tokens mid-thought.
+    # Return original so the user at least sees something.
     return text
 
 
@@ -150,7 +151,7 @@ def start_assessment(topic: dict, user_memory: UserMemory = None) -> dict:
         messages=[{"role": "user", "content": prompt}],
         model=LOCAL_MODEL,
         system=system,
-        max_tokens=512,
+        max_tokens=1500,
         temperature=0.4,
     )
 
@@ -199,7 +200,7 @@ def continue_assessment(
         messages=messages,
         model=LOCAL_MODEL,
         system=ASSESSOR_SYSTEM,
-        max_tokens=768,
+        max_tokens=1500,
         temperature=0.3,
     )
 

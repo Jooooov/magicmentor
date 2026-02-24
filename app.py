@@ -512,7 +512,12 @@ def _assess_quizzing():
             break
 
     display_q = re.sub(r"\[(?:ASSESSMENT|QUESTION)_[^\]]+\]", "", last_q).strip()
-    st.markdown(f'<div class="mm-card-question">{display_q}</div>', unsafe_allow_html=True)
+    # Strip any leftover <think> block from display (safety net)
+    if "</think>" in display_q:
+        display_q = display_q.split("</think>", 1)[1].strip()
+    st.markdown('<div class="mm-card-question">', unsafe_allow_html=True)
+    st.markdown(display_q)
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Answer form ───────────────────────────────────────────────────────────
     with st.form("quiz_form", clear_on_submit=True):
