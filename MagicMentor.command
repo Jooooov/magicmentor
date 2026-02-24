@@ -38,15 +38,18 @@ fi
 echo "🧠 Modelo selecionado: $MODEL_NAME (${FREE_RAM_GB}GB livre)"
 
 # ── Start MLX server if not already running ──────────────────────────
-if ! curl -s http://localhost:8080/v1/models > /dev/null 2>&1; then
+MLX_WE_STARTED=0
+MLX_PID=""
+
+if ! curl -s --max-time 2 http://localhost:8080/v1/models > /dev/null 2>&1; then
     echo "   A arrancar servidor MLX..."
     KMP_DUPLICATE_LIB_OK=TRUE mlx_lm.server --model "$MODEL_PATH" --port 8080 &
     MLX_PID=$!
+    MLX_WE_STARTED=1
 
     # Wait until server is ready (max 30s) or detect crash
     for i in $(seq 1 30); do
         sleep 1
-        # Check if process is still alive
         if ! kill -0 $MLX_PID 2>/dev/null; then
             echo ""
             echo "❌ Servidor MLX falhou a arrancar."
@@ -55,7 +58,7 @@ if ! curl -s http://localhost:8080/v1/models > /dev/null 2>&1; then
             read -p "Pressiona Enter para sair..."
             exit 1
         fi
-        if curl -s http://localhost:8080/v1/models > /dev/null 2>&1; then
+        if curl -s --max-time 1 http://localhost:8080/v1/models > /dev/null 2>&1; then
             echo "   ✅ $MODEL_NAME pronto!"
             break
         fi
@@ -64,6 +67,16 @@ if ! curl -s http://localhost:8080/v1/models > /dev/null 2>&1; then
 else
     echo "🧠 Modelo local já está a correr."
 fi
+
+# ── Auto-cleanup: matar MLX ao fechar o Terminal ─────────────────────
+_cleanup() {
+    if [ "$MLX_WE_STARTED" -eq 1 ] && [ -n "$MLX_PID" ]; then
+        echo ""
+        echo "🛑 A fechar servidor MLX ($MODEL_NAME)..."
+        kill "$MLX_PID" 2>/dev/null
+    fi
+}
+trap _cleanup EXIT INT TERM
 
 # ── Launch Streamlit web app ──────────────────────────────────────────
 echo ""
