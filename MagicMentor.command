@@ -70,11 +70,10 @@ echo ""
 echo "✨ A iniciar MagicMentor Web App..."
 echo ""
 
-PYTHON="$(dirname "$0")/.venv/bin/python3.13"
+PYTHON="$(which python3)"
 
-if [ ! -f "$PYTHON" ]; then
-    echo "❌ Virtual environment não encontrado."
-    echo "   Corre primeiro: cd $(dirname "$0") && python3 -m venv .venv && pip install -r backend/requirements.txt"
+if [ -z "$PYTHON" ]; then
+    echo "❌ Python3 não encontrado no sistema."
     read -p "Pressiona Enter para sair..."
     exit 1
 fi
