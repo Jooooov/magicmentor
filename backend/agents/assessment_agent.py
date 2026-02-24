@@ -66,8 +66,9 @@ When finished (after 8 questions):
 
 RULES:
 - One question per subtopic, then move on — never ask follow-ups on the same subtopic
-- Feedback: correct/partially correct/incorrect + what was missing. Max 15 words.
-- No "Great!", no "That's interesting!", no padding, no explanations
+- Feedback: correct/partially correct/incorrect + what was missing or could improve. Max 150 words.
+- Question: max 5 sentences.
+- No "Great!", no "That's interesting!", no padding
 - [LOW_CONFIDENCE] flag = score 25, note "Added to study plan.", move on
 - Cover all subtopics before emitting [ASSESSMENT_COMPLETE]"""
 
@@ -147,7 +148,7 @@ def start_assessment(topic: dict, user_memory: UserMemory = None) -> dict:
         messages=[{"role": "user", "content": prompt}],
         model=LOCAL_MODEL,
         system=system,
-        max_tokens=800,
+        max_tokens=1200,
         temperature=0.4,
     )
 
@@ -196,7 +197,7 @@ def continue_assessment(
         messages=messages,
         model=LOCAL_MODEL,
         system=ASSESSOR_SYSTEM,
-        max_tokens=800,
+        max_tokens=1200,
         temperature=0.3,
     )
 
